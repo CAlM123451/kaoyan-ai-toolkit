@@ -33,13 +33,115 @@ def _validate_hours(s: str) -> float:
     return v
 
 
+def _cmd_wrong(args) -> int:
+    """错题本子命令分派。"""
+    from .wrong_book import WrongBook, format_wrong_book
+
+    book = WrongBook(args.book).load()
+
+    if not args.wcmd:
+        _print_wrong_stats(book)
+        return 0
+
+    if args.wcmd == "add":
+        tags = [t.strip() for t in args.tags.split(",") if t.strip()]
+        it = book.add(args.question, args.my_answer, args.correct,
+                      args.analysis, args.subject, args.source, tags)
+        print(f"已添加错题 #{it['id']}（{it['subject'] or '未分类'}）")
+        return 0
+
+    if args.wcmd == "list":
+        items = book.list_items(args.subject, args.keyword, args.unreviewed)
+        if args.output_md:
+            os.makedirs(os.path.dirname(os.path.abspath(args.output_md))
+                        or ".", exist_ok=True)
+            with open(args.output_md, "w", encoding="utf-8") as f:
+                f.write(format_wrong_book(items))
+            print(f"已导出 {len(items)} 条错题: {args.output_md}")
+        else:
+            for it in items:
+                # 用 ASCII 标记（防 Windows GBK 控制台编码崩溃）
+                flag = "[OK]" if it.get("reviewed_at") else "[待]"
+                print(f"#{it['id']} {flag} {it.get('subject', '未分类')}: "
+                      f"{it.get('question', '')[:60]}")
+            print(f"\n共 {len(items)} 条")
+        return 0
+
+    if args.wcmd == "remove":
+        ok = book.remove(args.id)
+        print(f"已删除错题 #{args.id}" if ok else f"未找到错题 #{args.id}")
+        return 0 if ok else 1
+
+    if args.wcmd == "stats":
+        _print_wrong_stats(book)
+        return 0
+
+    if args.wcmd == "review":
+        cache = AICache(os.path.join(args.output, ".cache.sqlite"))
+        from .ai import review_wrong_question
+        targets = ([it for it in book.list_items() if it["id"] == args.id]
+                   if args.id else book.list_items(only_unreviewed=True))
+        if not targets:
+            print("没有待复盘的错题")
+            return 0
+        for it in targets:
+            print(f"AI 复盘 #{it['id']} …")
+            text = "\n".join(filter(None, [
+                it.get("question"), "我的答案: " + it.get("my_answer", ""),
+                "正确答案: " + it.get("correct_answer", ""),
+                "解析: " + it.get("analysis", ""),
+            ]))
+            try:
+                result = review_wrong_question(text, cache)
+            except RuntimeError as e:
+                print(f"  AI 复盘失败: {e}")
+                continue
+            book.update(
+                it["id"],
+                analysis=(it.get("analysis", "") + "\n【AI复盘】\n"
+                          + "\n".join(f"{k}: {v}" for k, v in result.items())),
+            )
+            book.mark_reviewed(it["id"])
+            print(f"  [OK] 已写入复盘并标记完成")
+        return 0
+
+    print("用法: kaoyan-toolkit wrong <add|list|stats|remove|review>")
+    return 1
+
+
+def _print_wrong_stats(book) -> None:
+    st = book.stats()
+    print(f"错题总数: {st['total']} · 未复盘: {st['unreviewed']} · "
+          f"反复错(>=3): {st['repeated_count']}")
+    for subject, n in st["subjects"].items():
+        print(f"  {subject}: {n}")
+
+
+def _cmd_quiz(args) -> int:
+    """AI 阅读出题子命令。"""
+    from .ai_quiz import format_quiz_markdown, generate_quiz
+    from .cache import AICache
+
+    os.makedirs(args.output, exist_ok=True)
+    text = parse_file(args.input)
+    cache = AICache(os.path.join(args.output, ".cache.sqlite"))
+    print(f"基于材料生成 {args.count} 道阅读题（AI 生成中…）")
+    quiz = generate_quiz(text, n=args.count, cache=cache)
+    md = format_quiz_markdown(quiz)
+    path = os.path.join(args.output, "quiz.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(md)
+    print(f"已生成: {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="kaoyan-toolkit",
         description="考研 AI 备考工作台 —— 考点分析 / 复习规划 / 思维导图 / 错题复盘",
     )
     parser.add_argument(
-        "--version", action="version", version="%(prog)s 0.2.0"
+        "--version", action="version", version="%(prog)s 0.3.0"
     )
     sub = parser.add_subparsers(dest="cmd")
 
@@ -73,6 +175,36 @@ def main(argv: list[str] | None = None) -> int:
     pc.add_argument("--stats", action="store_true", help="显示缓存统计")
     pc.add_argument("-o", "--output", default="output")
 
+    # wrong book
+    pw = sub.add_parser("wrong", help="错题本管理（增删查/统计/AI复盘）")
+    wsub = pw.add_subparsers(dest="wcmd")
+    wadd = wsub.add_parser("add", help="添加错题")
+    wadd.add_argument("--question", required=True, help="题干")
+    wadd.add_argument("--my-answer", default="", help="我的答案")
+    wadd.add_argument("--correct", default="", help="正确答案")
+    wadd.add_argument("--analysis", default="", help="解析")
+    wadd.add_argument("--subject", default="", help="科目")
+    wadd.add_argument("--source", default="", help="来源（如 2021年真题）")
+    wadd.add_argument("--tags", default="", help="标签，逗号分隔")
+    wlist = wsub.add_parser("list", help="列出错题")
+    wlist.add_argument("--subject", default="", help="按科目筛选")
+    wlist.add_argument("--keyword", default="", help="按关键词筛选")
+    wlist.add_argument("--unreviewed", action="store_true", help="仅未复盘")
+    wlist.add_argument("-o", "--output-md", default="", help="导出 Markdown 路径")
+    wsub.add_parser("stats", help="错题统计")
+    wrm = wsub.add_parser("remove", help="删除错题")
+    wrm.add_argument("id", type=int, help="错题 ID")
+    wrv = wsub.add_parser("review", help="AI 复盘未复盘错题")
+    wrv.add_argument("--id", type=int, default=0, help="指定 ID（默认全部未复盘）")
+    wrv.add_argument("-o", "--output", default="output")
+    pw.add_argument("-b", "--book", default="wrong_book.json", help="错题本路径")
+
+    # quiz
+    pq = sub.add_parser("quiz", help="AI 阅读出题（需 API）")
+    pq.add_argument("input", help="阅读材料文件 (txt/pdf/docx)")
+    pq.add_argument("--count", type=int, default=3, help="题目数量（默认 3）")
+    pq.add_argument("-o", "--output", default="output")
+
     args = parser.parse_args(argv)
 
     if not args.cmd:
@@ -93,6 +225,14 @@ def main(argv: list[str] | None = None) -> int:
             if st["oldest"] and st["newest"]:
                 print(f"最早写入: {st['oldest']}  最新写入: {st['newest']}")
         return 0
+
+    # 错题本
+    if args.cmd == "wrong":
+        return _cmd_wrong(args)
+
+    # AI 阅读出题
+    if args.cmd == "quiz":
+        return _cmd_quiz(args)
 
     os.makedirs(args.output, exist_ok=True)
 
