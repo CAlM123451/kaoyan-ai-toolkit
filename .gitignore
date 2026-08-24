@@ -1,9 +1,10 @@
 __pycache__/
 *.pyc
-output/
+output*/
 .cache.sqlite
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+_check.txt
 .venv/
 venv/
