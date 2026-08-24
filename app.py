@@ -81,8 +81,21 @@ def fn_review(wrong_text: str) -> str:
 
 def fn_cache_stats() -> str:
     """显示缓存统计信息。"""
-    cache = _get_cache()
-    return f"缓存条目数: {cache.size}"
+    st = _get_cache().stats()
+    lines = [
+        f"- 缓存条目数: **{st['entries']}**",
+        f"- 数据库大小: {st['db_size_kb']} KB",
+    ]
+    if st["oldest"] and st["newest"]:
+        lines.append(f"- 最早写入: {st['oldest']}")
+        lines.append(f"- 最新写入: {st['newest']}")
+    return "\n".join(lines)
+
+
+def fn_cache_clear() -> str:
+    """清空缓存并返回提示。"""
+    _get_cache().clear()
+    return "缓存已清空"
 
 
 def build_demo():
@@ -124,8 +137,7 @@ def build_demo():
         plan_btn.click(fn_plan, [exam_date, daily_hours, plan_use_ai], plan_out)
         review_btn.click(fn_review, [wrong_text], review_out)
         stats_btn.click(fn_cache_stats, outputs=cache_out)
-        clear_btn.click(lambda: (_get_cache().clear(), "缓存已清空"),
-                        outputs=cache_out)
+        clear_btn.click(fn_cache_clear, outputs=cache_out)
 
     return demo
 

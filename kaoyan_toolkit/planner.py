@@ -1,5 +1,5 @@
 """复习规划算法：纯本地确定性计算（不依赖 AI），离线可用。"""
-from datetime import date
+from datetime import date, timedelta
 
 
 # 西综六科推荐复习顺序与时间占比
@@ -18,6 +18,8 @@ PHASES = [
     ("强化", 0.35, "重点突破高频考点 + 错题整理，薄弱科目加时"),
     ("冲刺", 0.25, "全真模拟 + 查漏补缺 + 回顾错题本"),
 ]
+# 阶段名 → 说明的快速映射（避免每次循环查找）
+PHASE_DESC = {name: desc for name, _, desc in PHASES}
 
 
 def compute_weeks(exam_date: str, daily_hours: float,
@@ -29,7 +31,8 @@ def compute_weeks(exam_date: str, daily_hours: float,
         daily_hours: 每天可用小时
         priorities: [(科目名, 时间占比)]，占比之和应≈1.0
     返回:
-        [{"week", "phase", "focus", "daily_hours", "milestone"}]
+        [{"week", "phase", "focus", "daily_hours", "milestone",
+          "start_date", "end_date"}]
     """
     if priorities is None:
         priorities = DEFAULT_PRIORITIES
@@ -58,11 +61,9 @@ def compute_weeks(exam_date: str, daily_hours: float,
     for w in range(1, total_weeks + 1):
         # 确定当前阶段
         phase_name = "冲刺"
-        phase_desc = PHASES[2][2]
         for pname, ps, pe in phase_weeks:
             if ps < w <= pe:
                 phase_name = pname
-                phase_desc = [d for n, _, d in PHASES if n == pname][0]
                 break
 
         # 基础/强化阶段：按科目轮转；冲刺阶段：综合
@@ -79,13 +80,19 @@ def compute_weeks(exam_date: str, daily_hours: float,
             focus = "综合模拟 + 错题回顾"
             milestone = "完成一套全真模拟卷并复盘错题"
 
+        # 本周日期范围：从今天算起，最后一周截止到考试日
+        week_start = today + timedelta(days=(w - 1) * 7)
+        week_end = min(week_start + timedelta(days=6), exam)
+
         plan.append({
             "week": w,
             "phase": phase_name,
-            "phase_desc": phase_desc,
+            "phase_desc": PHASE_DESC[phase_name],
             "focus": focus,
             "daily_hours": daily_hours,
             "milestone": milestone,
+            "start_date": week_start.isoformat(),
+            "end_date": week_end.isoformat(),
         })
     return plan
 
@@ -103,11 +110,11 @@ def format_plan_markdown(plan: list[dict]) -> str:
             lines.append(f"\n## {current_phase}阶段")
             if desc:
                 lines.append(f"> {desc}\n")
-            lines.append("| 周次 | 主攻科目 | 每日小时 | 里程碑 |")
-            lines.append("|---|---|---|---|")
+            lines.append("| 周次 | 日期 | 主攻科目 | 每日小时 | 里程碑 |")
+            lines.append("|---|---|---|---|---|")
         lines.append(
-            f"| {p['week']} | {p['focus']} | "
-            f"{p['daily_hours']} | {p['milestone']} |"
+            f"| {p['week']} | {p['start_date']} ~ {p['end_date']} | "
+            f"{p['focus']} | {p['daily_hours']} | {p['milestone']} |"
         )
 
     total_weeks = len(plan)

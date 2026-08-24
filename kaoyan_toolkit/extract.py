@@ -26,12 +26,14 @@ _STOP_WORDS = {
     "的", "了", "是", "在", "和", "与", "及", "或", "对", "为", "中",
     "等", "并", "不", "一", "有", "可", "能", "而", "其", "于", "者",
     "问题", "下列", "关于", "正确", "错误", "哪项", "下列哪项", "最",
-    "以下", "属于", "不是", "属于", "主要", "常见", "相关", "可能",
+    "以下", "属于", "不是", "主要", "常见", "相关", "可能",
 }
 
 
 def detect_subjects(text: str) -> dict[str, int]:
     """统计文本中各科目关键词命中次数。"""
+    if not text:
+        return {}
     scores = {}
     for subject, kws in SUBJECT_KEYWORDS.items():
         hit = sum(text.count(kw) for kw in kws)

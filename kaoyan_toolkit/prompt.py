@@ -13,6 +13,8 @@ SUBJECT_ANALYSIS_PROMPT = """你是资深西医综合(306)考研辅导老师。�
   "suggested_priority": ["按优先级排列的复习科目", "..."]
 }}
 
+要求：key_points 至少 3 个、最多 8 个；不要输出空字符串；coverage 用数字或 "xx%"。
+
 资料内容：
 ---
 {text}
@@ -20,7 +22,7 @@ SUBJECT_ANALYSIS_PROMPT = """你是资深西医综合(306)考研辅导老师。�
 
 WRONG_QUESTION_PROMPT = """你是西医综合(306)考研辅导老师。下面是一道做错的题（含选项和解析），请做复盘。
 
-要求输出（JSON 格式）：
+要求输出（JSON 格式，不要多余文字，每个字段都要有实际内容，不要空字符串）：
 {{
   "knowledge_point": "本题考察的核心知识点",
   "mistake_reason": "做错的根本原因（知识盲区/审题失误/理解偏差等）",

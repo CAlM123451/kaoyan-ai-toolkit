@@ -60,3 +60,29 @@ class AICache:
                 return c.execute("SELECT COUNT(*) FROM ai_cache").fetchone()[0]
         except sqlite3.Error:
             return 0
+
+    def stats(self) -> dict:
+        """返回缓存统计信息：条目数、最早/最新写入时间、库文件大小。"""
+        info = {"entries": 0, "oldest": None, "newest": None, "db_size_kb": 0.0}
+        try:
+            with self._conn() as c:
+                info["entries"] = c.execute(
+                    "SELECT COUNT(*) FROM ai_cache"
+                ).fetchone()[0]
+                row = c.execute(
+                    "SELECT MIN(created_at), MAX(created_at) FROM ai_cache"
+                ).fetchone()
+            info["oldest"], info["newest"] = row
+        except sqlite3.Error:
+            return info
+        try:
+            # 主库 + WAL 日志合计大小
+            size = 0.0
+            for suffix in ("", "-wal", "-shm"):
+                p = self.db_path + suffix
+                if os.path.isfile(p):
+                    size += os.path.getsize(p)
+            info["db_size_kb"] = round(size / 1024, 1)
+        except OSError:
+            pass
+        return info

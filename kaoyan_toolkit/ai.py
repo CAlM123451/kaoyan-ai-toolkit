@@ -5,7 +5,7 @@ import os
 import re
 
 import requests
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .cache import AICache
 from .prompt import PLAN_PROMPT, SUBJECT_ANALYSIS_PROMPT, WRONG_QUESTION_PROMPT
@@ -23,7 +23,24 @@ def _stable_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=10))
+def _truncate(text: str, max_chars: int) -> str:
+    """按句子边界截断文本，避免从句子中间切断导致语义丢失。"""
+    if len(text) <= max_chars:
+        return text
+    cut = text[:max_chars]
+    # 在最后一个句末标点/换行处截断（至少保留 60% 内容）
+    for ch in ("。", "？", "！", "\n", ".", "?", "!"):
+        pos = cut.rfind(ch)
+        if pos > max_chars * 0.6:
+            return cut[:pos + 1]
+    return cut
+
+
+# 网络类异常才重试（超时/连接失败/HTTP错误可恢复），业务错误（如 key 无效）直接抛出
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=10),
+       retry=retry_if_exception_type(
+           (requests.Timeout, requests.ConnectionError, requests.HTTPError)
+       ))
 def _call_llm(prompt: str, system: str = "你是一位严谨的考研辅导专家。",
               max_tokens: int = 1500) -> str:
     api_key = get_api_key()
@@ -33,25 +50,46 @@ def _call_llm(prompt: str, system: str = "你是一位严谨的考研辅导专�
             "请先设置：$env:DEEPSEEK_API_KEY = 'sk-你的key'（PowerShell）"
         )
 
-    resp = requests.post(
-        DEEPSEEK_API_URL,
-        json={
-            "model": MODEL,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.3,
-            "max_tokens": max_tokens,
-        },
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        timeout=120,
-    )
+    try:
+        resp = requests.post(
+            DEEPSEEK_API_URL,
+            json={
+                "model": MODEL,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.3,
+                "max_tokens": max_tokens,
+            },
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            timeout=120,
+        )
+    except requests.Timeout:
+        raise RuntimeError("DeepSeek API 请求超时，请检查网络后重试")
+    except requests.ConnectionError:
+        raise RuntimeError("无法连接 DeepSeek API，请检查网络/代理设置")
+
+    if resp.status_code == 401:
+        raise RuntimeError("API Key 无效或已过期，请检查 DEEPSEEK_API_KEY")
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"].strip()
+
+
+def _with_cache(cache: AICache | None, key: str,
+                producer) -> dict:
+    """统一的缓存读写流程：命中直接返回，未命中调用 producer 并写缓存。"""
+    if cache:
+        cached = cache.get(key)
+        if cached:
+            return _parse_json(cached)
+    result = producer()
+    if cache:
+        cache.set(key, result)
+    return _parse_json(result)
 
 
 def _parse_json(text: str) -> dict:
@@ -80,48 +118,29 @@ def _parse_json(text: str) -> dict:
 
 def analyze_subjects(text: str, cache: AICache | None = None,
                      max_chars: int = 8000) -> dict:
-    """AI 考点分析（文本超长时截断）。"""
-    truncated = text[:max_chars]
+    """AI 考点分析（文本超长时按句子边界截断）。"""
+    truncated = _truncate(text, max_chars)
     key = "subj:" + _stable_hash(truncated)
-    if cache:
-        cached = cache.get(key)
-        if cached:
-            return _parse_json(cached)
-    prompt = SUBJECT_ANALYSIS_PROMPT.format(text=truncated)
-    result = _call_llm(prompt, max_tokens=2000)
-    if cache:
-        cache.set(key, result)
-    return _parse_json(result)
+    return _with_cache(cache, key, lambda: _call_llm(
+        SUBJECT_ANALYSIS_PROMPT.format(text=truncated), max_tokens=2000))
 
 
 def review_wrong_question(text: str, cache: AICache | None = None,
                           max_chars: int = 4000) -> dict:
     """AI 错题复盘。"""
-    truncated = text[:max_chars]
+    truncated = _truncate(text, max_chars)
     key = "review:" + _stable_hash(truncated)
-    if cache:
-        cached = cache.get(key)
-        if cached:
-            return _parse_json(cached)
-    prompt = WRONG_QUESTION_PROMPT.format(text=truncated)
-    result = _call_llm(prompt, max_tokens=1500)
-    if cache:
-        cache.set(key, result)
-    return _parse_json(result)
+    return _with_cache(cache, key, lambda: _call_llm(
+        WRONG_QUESTION_PROMPT.format(text=truncated), max_tokens=1500))
 
 
 def generate_plan(exam_date: str, daily_hours: float, priority: str,
                   cache: AICache | None = None) -> dict:
     """AI 复习计划生成。"""
     key = f"plan:{exam_date}:{daily_hours}:{_stable_hash(priority)}"
-    if cache:
-        cached = cache.get(key)
-        if cached:
-            return _parse_json(cached)
-    prompt = PLAN_PROMPT.format(
-        exam_date=exam_date, daily_hours=daily_hours, priority=priority
-    )
-    result = _call_llm(prompt, max_tokens=2000)
-    if cache:
-        cache.set(key, result)
-    return _parse_json(result)
+    return _with_cache(cache, key, lambda: _call_llm(
+        PLAN_PROMPT.format(
+            exam_date=exam_date, daily_hours=daily_hours, priority=priority
+        ),
+        max_tokens=2000,
+    ))

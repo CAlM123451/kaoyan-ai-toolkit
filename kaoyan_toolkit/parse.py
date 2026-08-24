@@ -17,7 +17,8 @@ def parse_file(path: str) -> str:
 
 
 def _parse_txt(path: str) -> str:
-    for enc in ("utf-8", "gbk", "utf-8-sig"):
+    # utf-8-sig 优先：能正确处理带 BOM 的 UTF-8 文件
+    for enc in ("utf-8-sig", "utf-8", "gbk"):
         try:
             with open(path, "r", encoding=enc) as f:
                 return f.read()
