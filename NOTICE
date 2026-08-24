@@ -43,6 +43,24 @@ We gratefully acknowledge their authors and contributors.
   a modified binary including this path, AGPL obligations may apply.
   For a fully MIT-only pipeline, use text-layer PDFs only.
 
+### genanki
+- License: MIT
+- URL: https://github.com/kerrickstaley/genanki
+- Used for: Exporting wrong-question book to Anki .apkg decks
+- Note: Optional; `wrong export --format anki`
+
+### openpyxl
+- License: MIT
+- URL: https://github.com/openpyxl/openpyxl
+- Used for: Exporting wrong-question book to Excel .xlsx
+- Note: Optional; `wrong export --format excel`
+
+### rank_bm25
+- License: Apache 2.0
+- URL: https://github.com/dorianbrown/rank_bm25
+- Used for: Local offline similar-question retrieval (BM25 algorithm)
+- Note: Optional; `similar` command
+
 ## Core Dependencies
 
 - requests (Apache 2.0)
