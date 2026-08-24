@@ -1,11 +1,21 @@
 """导出：考点分析结果 → Markdown / Mermaid 思维导图。"""
 
 
-def to_mermaid(subject_dist: dict[str, int]) -> str:
-    """科目分布 → Mermaid mindmap 语法。"""
+def to_mermaid(subject_dist: dict[str, int],
+               top_keywords: list[tuple[str, int]] | None = None) -> str:
+    """科目分布 → Mermaid mindmap 语法（含高频关键词子节点）。"""
     lines = ["mindmap", "  西综306考点分布"]
     for subject, hits in subject_dist.items():
         lines.append(f"    {subject}({hits})")
+        # 如果有高频关键词，给每个科目添加子节点
+        if top_keywords:
+            # 简单启发式：把关键词归到命中的科目下
+            from .extract import SUBJECT_KEYWORDS
+            subject_kws = SUBJECT_KEYWORDS.get(subject, [])
+            matched = [(w, c) for w, c in top_keywords
+                       if any(kw in w for kw in subject_kws)]
+            for w, c in matched[:5]:  # 每科最多 5 个子节点
+                lines.append(f"      {w}({c})")
     return "\n".join(lines)
 
 
@@ -17,10 +27,13 @@ def to_markdown(subject_dist: dict[str, int], top_keywords: list[tuple],
     if ai_result and ai_result.get("subjects"):
         out.append("## AI 分析")
         for s in ai_result["subjects"]:
-            out.append(f"- **{s.get('name','')}**（覆盖率 {s.get('coverage','?')}）：")
+            out.append(f"- **{s.get('name', '')}**（覆盖率 {s.get('coverage', '?')}）：")
             kps = s.get("key_points", [])
             if kps:
                 out.append("  - 高频考点：" + "、".join(kps[:8]))
+            diff = s.get("difficulty_hint")
+            if diff:
+                out.append(f"  - 常见难点：{diff}")
         if ai_result.get("overall"):
             out.append(f"\n**总评**：{ai_result['overall']}")
         if ai_result.get("suggested_priority"):
@@ -28,18 +41,24 @@ def to_markdown(subject_dist: dict[str, int], top_keywords: list[tuple],
         out.append("")
 
     out.append("## 科目分布（本地统计）")
+    total_hits = sum(subject_dist.values()) or 1
     for subject, hits in subject_dist.items():
-        out.append(f"- {subject}: {hits} 次关键词命中")
+        pct = hits / total_hits * 100
+        bar = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
+        out.append(f"- {subject}: {bar} {hits} 次 ({pct:.0f}%)")
     out.append("")
 
     if top_keywords:
-        out.append("## 高频关键词")
-        out.append("、".join(f"{w}({c})" for w, c in top_keywords[:20]))
+        out.append("## 高频关键词 Top 20")
+        out.append("| 排名 | 关键词 | 出现次数 |")
+        out.append("|---|---|---|")
+        for i, (w, c) in enumerate(top_keywords[:20], 1):
+            out.append(f"| {i} | {w} | {c} |")
         out.append("")
 
     out.append("## Mermaid 思维导图")
     out.append("```mermaid")
-    out.append(to_mermaid(subject_dist))
+    out.append(to_mermaid(subject_dist, top_keywords))
     out.append("```")
     out.append("")
 

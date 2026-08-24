@@ -4,18 +4,25 @@ import sqlite3
 
 
 class AICache:
+    """基于 SQLite 的 AI 调用结果缓存。"""
+
     def __init__(self, db_path: str = "cache.sqlite"):
         self.db_path = db_path
-        os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+        parent = os.path.dirname(os.path.abspath(db_path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         with self._conn() as c:
             c.execute(
                 """CREATE TABLE IF NOT EXISTS ai_cache (
-                       key TEXT PRIMARY KEY, result TEXT
+                       key TEXT PRIMARY KEY, result TEXT,
+                       created_at TEXT DEFAULT (datetime('now'))
                    )"""
             )
 
     def _conn(self):
-        return sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
 
     def get(self, key: str) -> str | None:
         try:
@@ -31,8 +38,25 @@ class AICache:
         try:
             with self._conn() as c:
                 c.execute(
-                    "INSERT OR REPLACE INTO ai_cache VALUES (?,?)",
+                    "INSERT OR REPLACE INTO ai_cache (key, result) VALUES (?,?)",
                     (key, result),
                 )
         except sqlite3.Error:
             pass
+
+    def clear(self):
+        """清空全部缓存。"""
+        try:
+            with self._conn() as c:
+                c.execute("DELETE FROM ai_cache")
+        except sqlite3.Error:
+            pass
+
+    @property
+    def size(self) -> int:
+        """返回缓存条目数。"""
+        try:
+            with self._conn() as c:
+                return c.execute("SELECT COUNT(*) FROM ai_cache").fetchone()[0]
+        except sqlite3.Error:
+            return 0

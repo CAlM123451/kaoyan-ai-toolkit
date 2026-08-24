@@ -1,4 +1,6 @@
 """考点关键词提取：本地规则 + jieba 分词，把文本按西综科目归类。"""
+import re
+from collections import Counter
 
 # 西综六大科目及其关键词（可扩充）
 SUBJECT_KEYWORDS = {
@@ -19,35 +21,35 @@ SUBJECT_KEYWORDS = {
 # 常见题型标记
 QUESTION_MARKERS = ["A型", "B型", "X型", "单选", "多选", "病例分析"]
 
+# 中文停用词
+_STOP_WORDS = {
+    "的", "了", "是", "在", "和", "与", "及", "或", "对", "为", "中",
+    "等", "并", "不", "一", "有", "可", "能", "而", "其", "于", "者",
+    "问题", "下列", "关于", "正确", "错误", "哪项", "下列哪项", "最",
+    "以下", "属于", "不是", "属于", "主要", "常见", "相关", "可能",
+}
+
 
 def detect_subjects(text: str) -> dict[str, int]:
     """统计文本中各科目关键词命中次数。"""
     scores = {}
     for subject, kws in SUBJECT_KEYWORDS.items():
-        hit = sum(1 for kw in kws if kw in text)
+        hit = sum(text.count(kw) for kw in kws)
         if hit:
             scores[subject] = hit
     return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
 
 
-def extract_keywords(text: str, top: int = 20) -> list[str]:
-    """用 jieba 提取文本中的医学高频词。"""
+def extract_keywords(text: str, top: int = 20) -> list[tuple[str, int]]:
+    """用 jieba 提取文本中的医学高频词，返回 [(词, 次数)]。"""
     try:
         import jieba
     except ImportError:
         raise RuntimeError("需要安装 jieba: pip install jieba")
 
-    import re
-    from collections import Counter
-
-    stop = {
-        "的", "了", "是", "在", "和", "与", "及", "或", "对", "为", "中",
-        "等", "并", "不", "一", "有", "可", "能", "而", "其", "于", "者",
-        "问题", "下列", "关于", "正确", "错误", "哪项", "下列哪项", "最",
-    }
     words = jieba.lcut(text)
     counter = Counter(
         w for w in words
-        if len(w) >= 2 and w not in stop and not re.fullmatch(r"[\d\W]+", w)
+        if len(w) >= 2 and w not in _STOP_WORDS and not re.fullmatch(r"[\d\W]+", w)
     )
-    return [w for w, _ in counter.most_common(top)]
+    return counter.most_common(top)

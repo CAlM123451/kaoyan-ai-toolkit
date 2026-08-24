@@ -1,8 +1,11 @@
 """资料解析：支持 txt / pdf / docx 三种格式的文本提取。"""
+import os
 
 
 def parse_file(path: str) -> str:
     """按扩展名解析文件为纯文本。"""
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"文件不存在: {path}")
     lower = path.lower()
     if lower.endswith(".txt"):
         return _parse_txt(path)
@@ -34,7 +37,10 @@ def _parse_pdf(path: str) -> str:
             text = page.extract_text()
             if text:
                 parts.append(text)
-    return "\n".join(parts)
+    result = "\n".join(parts)
+    if not result.strip():
+        raise ValueError(f"PDF 文件无可提取文本（可能是扫描件）: {path}")
+    return result
 
 
 def _parse_docx(path: str) -> str:
@@ -43,4 +49,14 @@ def _parse_docx(path: str) -> str:
     except ImportError:
         raise RuntimeError("解析 docx 需要安装 python-docx: pip install python-docx")
     doc = docx.Document(path)
-    return "\n".join(p.text for p in doc.paragraphs if p.text)
+    parts = [p.text for p in doc.paragraphs if p.text]
+    if not parts:
+        # 尝试从表格中提取
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    parts.append(" | ".join(cells))
+    if not parts:
+        raise ValueError(f"docx 文件无可提取文本: {path}")
+    return "\n".join(parts)
