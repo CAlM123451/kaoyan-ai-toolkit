@@ -1,4 +1,7 @@
-"""Gradio Web 界面：python app.py → http://127.0.0.1:7860"""
+"""Gradio Web 界面：python app.py → http://127.0.0.1:7860
+
+六个功能页签 + 使用说明书，自定义主题美化。
+"""
 import os
 
 import gradio as gr
@@ -30,6 +33,76 @@ def _get_book() -> WrongBook:
             os.path.join(os.path.dirname(__file__), "wrong_book.json")
         ).load()
     return _BOOK
+
+
+# ===================== 使用说明书 =====================
+USE_GUIDE = """
+## 🎓 欢迎使用考研 AI 备考工作台
+
+本工具帮你在**自己拥有的真题资料**上完成：考点分析 → 复习规划 → 错题复盘 → 错题本管理 → AI 阅读出题。数据默认保存在本地，仅在你主动启用 AI 功能时调用 DeepSeek API。
+
+---
+
+### 📋 功能一览
+
+| 页签 | 功能 | 是否需要 API |
+|---|---|---|
+| 考点分析 | 真题考频统计 + 科目分布 + 思维导图 + AI 深度分析 | 可选（AI 深度分析需） |
+| 复习规划 | 按考试日期生成三阶段周计划（基础/强化/冲刺） | 可选（AI 优化需） |
+| 错题复盘 | 粘贴错题 → AI 输出错因/知识点/同类题预测 | 需要 |
+| 错题本 | 错题结构化管理 + AI 批量复盘 + 反复错统计 | 复盘需 |
+| AI 阅读出题 | 基于你的材料生成考研风格四选一阅读题 | 需要 |
+| 缓存管理 | 查看/清空 AI 调用缓存（省钱） | — |
+
+---
+
+### ⚙️ 首次配置（AI 功能）
+
+在启动本程序前设置环境变量（PowerShell）：
+
+```powershell
+$env:DEEPSEEK_API_KEY = "sk-你的key"
+```
+
+> 没有 API Key 也不影响使用：考点分析可"纯本地统计"、复习规划完全离线生成。
+
+### 🚀 各页签使用说明
+
+**1. 考点分析**：上传 txt/pdf/docx → 勾选"启用 AI 深度分析"→ 点「开始分析」。输出包含：AI 考点点评、科目分布进度条、高频关键词 Top20、Mermaid 思维导图（可复制到支持 Mermaid 的笔记软件渲染）。
+
+**2. 复习规划**：填入考试日期（YYYY-MM-DD，如 2027-12-25）+ 每天可用小时 → 生成三阶段周计划（含每周日期、主攻科目、里程碑）。勾选 AI 优化后可获得额外学习建议。
+
+**3. 错题复盘**：粘贴一道错题（题干 + 你的选项 + 正确答案/解析）→ 点「AI 复盘」。输出：核心知识点、做错原因、知识脉络、同类题预测、复习建议。
+
+**4. 错题本**：录入错题（科目/来源便于分类）→ 「查看错题列表」管理 → 点「AI 复盘全部未复盘错题」批量生成复盘记录并写入错题。反复错 ≥3 次的题会重点标出。
+
+**5. AI 阅读出题**：上传一段你自己的阅读材料 → 选择题目数量 → 生成考研风格选择题（细节/主旨/推理/词义/态度），答案与解析默认折叠，可自行练习。
+
+**6. 缓存管理**：AI 调用结果会缓存到 `.cache.sqlite`，相同内容不重复扣费。可查看条目数/占用空间/写入时间，随时清空。
+
+---
+
+### 🖥️ 命令行等效操作
+
+```bash
+python -m kaoyan_toolkit analyze 真题.txt -o output --no-ai   # 纯本地分析
+python -m kaoyan_toolkit plan --exam-date 2027-12-25 -o output
+python -m kaoyan_toolkit review 错题.txt -o output
+python -m kaoyan_toolkit wrong add --question "..." --subject 内科学
+python -m kaoyan_toolkit quiz 阅读材料.txt -o output
+```
+
+### 🔒 数据与合规
+
+- 仓库**不含任何版权真题内容**，请导入你自己拥有的资料（自用合法）
+- API Key 只走环境变量，不落盘、不硬编码
+- 本地统计/规划完全离线，不产生任何网络请求
+"""
+
+# 快捷填充示例（供演示）
+SAMPLE_WRONG = ("男，62岁，反复胸痛3年，活动后加重。心电图示V1-V4导联ST段抬高。"
+                "最可能的诊断是？\n我的答案：B. 心绞痛\n正确答案：A. 心肌梗死")
+SAMPLE_ANALYZE_HINT = "支持 txt / pdf / docx，可多文件分析；AI 深度分析需配置 API Key"
 
 
 def fn_analyze(file, use_ai: bool) -> str:
@@ -190,78 +263,169 @@ def fn_quiz(file, count) -> str:
         return f"出题失败: {e}\n\n请确认已设置 DEEPSEEK_API_KEY 环境变量。"
 
 
+# ===================== 界面构建 =====================
 def build_demo():
-    with gr.Blocks(title="考研 AI 备考工作台", theme=gr.themes.Soft()) as demo:
+    # 自定义主题：医学蓝 + 青色点缀，统一圆角与字体
+    theme = gr.themes.Soft(
+        primary_hue=gr.themes.colors.blue,
+        secondary_hue=gr.themes.colors.cyan,
+        neutral_hue=gr.themes.colors.slate,
+        font=["Noto Sans SC", "Microsoft YaHei", "PingFang SC", "sans-serif"],
+        radius_size=gr.themes.sizes.radius_md,
+        spacing_size=gr.themes.sizes.spacing_md,
+    )
+
+    with gr.Blocks(title="考研 AI 备考工作台", theme=theme,
+                   css=_CSS) as demo:
+        # ---------- 顶部 Hero ----------
         gr.Markdown(
-            "# 考研 AI 备考工作台\n\n"
-            "上传你**自己拥有的**真题/资料，本地解析 + DeepSeek AI 辅助分析。\n\n"
-            "数据合规：仓库不含任何版权内容，API Key 走环境变量。"
+            """
+            <div class="hero">
+              <div class="hero-title">🎓 考研 AI 备考工作台</div>
+              <div class="hero-sub">用 AI 把真题榨干：考点分析 · 复习规划 · 错题复盘 · 错题本 · AI 出题</div>
+              <div class="hero-badges">
+                <span class="badge">🔒 数据本地优先</span>
+                <span class="badge">🧠 DeepSeek 辅助</span>
+                <span class="badge">📖 首次使用请看「使用说明书」</span>
+              </div>
+            </div>
+            """
         )
 
-        with gr.Tab("考点分析"):
-            with gr.Row():
-                file_in = gr.File(label="上传真题/资料 (txt/pdf/docx)")
-                use_ai = gr.Checkbox(label="启用 AI 深度分析（需 DEEPSEEK_API_KEY）",
-                                     value=False)
-            analyze_btn = gr.Button("开始分析", variant="primary")
-            analyze_out = gr.Markdown()
+        # ---------- 使用说明书 ----------
+        with gr.Tab("📖 使用说明书"):
+            gr.Markdown(USE_GUIDE)
 
-        with gr.Tab("复习规划"):
-            exam_date = gr.Textbox(label="考试日期", placeholder="2027-12-25")
-            daily_hours = gr.Slider(1, 12, value=4, step=0.5, label="每天可用小时")
-            plan_use_ai = gr.Checkbox(label="启用 AI 优化（需 API）", value=False)
-            plan_btn = gr.Button("生成计划", variant="primary")
-            plan_out = gr.Markdown()
+        # ---------- 考点分析 ----------
+        with gr.Tab("📊 考点分析"):
+            gr.Markdown(
+                "<div class='tab-desc'>上传**你自己拥有的**真题/资料，"
+                "一键生成考点考频统计与 AI 深度分析。</div>"
+            )
+            with gr.Group():
+                with gr.Row():
+                    file_in = gr.File(label="📄 上传真题/资料 (txt/pdf/docx)",
+                                      scale=3)
+                    use_ai = gr.Checkbox(
+                        label="🧠 启用 AI 深度分析（需 DEEPSEEK_API_KEY）",
+                        value=False, scale=1)
+                analyze_btn = gr.Button("🚀 开始分析", variant="primary",
+                                        size="lg")
+            analyze_out = gr.Markdown(label="分析结果")
 
-        with gr.Tab("错题复盘"):
-            wrong_text = gr.Textbox(label="粘贴错题（含选项/解析）", lines=8)
-            review_btn = gr.Button("AI 复盘", variant="primary")
-            review_out = gr.Markdown()
+        # ---------- 复习规划 ----------
+        with gr.Tab("📅 复习规划"):
+            gr.Markdown(
+                "<div class='tab-desc'>输入考试日期与每日可用时长，"
+                "生成三阶段（基础/强化/冲刺）周计划。</div>"
+            )
+            with gr.Group():
+                with gr.Row():
+                    exam_date = gr.Textbox(
+                        label="考试日期", placeholder="2027-12-25",
+                        info="格式 YYYY-MM-DD", scale=1)
+                    daily_hours = gr.Slider(
+                        1, 12, value=4, step=0.5,
+                        label="每天可用小时", scale=1)
+                with gr.Row():
+                    plan_use_ai = gr.Checkbox(
+                        label="🧠 启用 AI 优化建议（需 API）", value=False)
+                    plan_btn = gr.Button("📋 生成计划", variant="primary",
+                                         size="lg")
+            plan_out = gr.Markdown(label="复习计划")
 
-        with gr.Tab("缓存管理"):
-            gr.Markdown("查看或清空 AI 调用缓存（缓存可节省 API 费用）。")
-            with gr.Row():
-                stats_btn = gr.Button("查看缓存")
-                clear_btn = gr.Button("清空缓存", variant="stop")
-            cache_out = gr.Markdown()
+        # ---------- 错题复盘 ----------
+        with gr.Tab("🔍 错题复盘"):
+            gr.Markdown(
+                "<div class='tab-desc'>粘贴一道做错的题，"
+                "AI 输出：核心知识点 / 错因 / 知识脉络 / 同类题预测 / 复习动作。</div>"
+            )
+            with gr.Group():
+                wrong_text = gr.Textbox(
+                    label="粘贴错题（含选项/解析）", lines=8,
+                    placeholder="题干…\n我的答案：…\n正确答案：…")
+                with gr.Row():
+                    fill_btn = gr.Button("✨ 填入示例", size="sm")
+                    review_btn = gr.Button("🧠 AI 复盘", variant="primary",
+                                           size="lg")
+            review_out = gr.Markdown(label="复盘结果")
 
-        with gr.Tab("错题本"):
-            gr.Markdown("**录入错题 → AI 自动复盘 → 周期回顾**，数据保存在 "
-                        "wrong_book.json。")
-            with gr.Row():
-                w_question = gr.Textbox(label="题干（必填）",
-                                        placeholder="把做错的题粘贴到这里",
-                                        lines=3)
-                w_my = gr.Textbox(label="我的答案", lines=2)
-                w_correct = gr.Textbox(label="正确答案", lines=2)
-            with gr.Row():
-                w_subject = gr.Dropdown(
-                    ["生理学", "内科学", "病理学", "外科学", "生物化学",
-                     "医学人文", "政治", "英语", "其他"],
-                    label="科目")
-                w_source = gr.Textbox(label="来源（如 2021年真题）")
-            w_add_btn = gr.Button("添加错题", variant="primary")
-            w_add_out = gr.Markdown()
-            w_list_btn = gr.Button("查看错题列表")
-            w_list_out = gr.Markdown()
-            with gr.Row():
-                w_del_id = gr.Textbox(label="删除 ID", placeholder="输入错题 ID")
-                w_del_btn = gr.Button("删除", variant="stop")
-            w_review_btn = gr.Button("AI 复盘全部未复盘错题", variant="secondary")
-            w_review_out = gr.Markdown()
+        # ---------- 缓存管理 ----------
+        with gr.Tab("💾 缓存管理"):
+            gr.Markdown(
+                "<div class='tab-desc'>AI 调用结果缓存到本地，"
+                "相同内容不重复扣费。定期清空可释放磁盘空间。</div>"
+            )
+            with gr.Group():
+                with gr.Row():
+                    stats_btn = gr.Button("📊 查看缓存", size="lg")
+                    clear_btn = gr.Button("🗑️ 清空缓存", variant="stop",
+                                          size="lg")
+            cache_out = gr.Markdown(label="缓存信息")
 
-        with gr.Tab("AI 阅读出题"):
-            gr.Markdown("上传**你自己的**阅读材料，AI 按考研风格命制选择题。")
-            with gr.Row():
-                quiz_file = gr.File(label="阅读材料 (txt/pdf/docx)")
-                quiz_count = gr.Slider(1, 10, value=3, step=1,
-                                       label="题目数量")
-            quiz_btn = gr.Button("生成练习题", variant="primary")
-            quiz_out = gr.Markdown()
+        # ---------- 错题本 ----------
+        with gr.Tab("📚 错题本"):
+            gr.Markdown(
+                "<div class='tab-desc'>结构化管理错题 → AI 自动复盘 → "
+                "反复错题重点盯防。数据保存在 wrong_book.json。</div>"
+            )
+            with gr.Accordion("✍️ 录入错题", open=True):
+                with gr.Row():
+                    w_question = gr.Textbox(
+                        label="题干（必填）",
+                        placeholder="把做错的题粘贴到这里", lines=3, scale=3)
+                with gr.Row():
+                    w_my = gr.Textbox(label="我的答案", lines=2, scale=1)
+                    w_correct = gr.Textbox(label="正确答案", lines=2, scale=1)
+                with gr.Row():
+                    w_subject = gr.Dropdown(
+                        ["生理学", "内科学", "病理学", "外科学", "生物化学",
+                         "医学人文", "政治", "英语", "其他"],
+                        label="科目", scale=1)
+                    w_source = gr.Textbox(
+                        label="来源（如 2021年真题）", scale=1)
+                w_add_btn = gr.Button("➕ 添加错题", variant="primary")
+                w_add_out = gr.Markdown()
+            with gr.Accordion("📋 错题管理", open=True):
+                with gr.Row():
+                    w_list_btn = gr.Button("查看错题列表", size="lg")
+                    w_review_btn = gr.Button(
+                        "🧠 AI 复盘全部未复盘错题", variant="secondary",
+                        size="lg")
+                with gr.Row():
+                    w_del_id = gr.Textbox(
+                        label="删除 ID", placeholder="输入错题 ID", scale=1)
+                    w_del_btn = gr.Button("🗑️ 删除", variant="stop", scale=1)
+                w_list_out = gr.Markdown(label="错题列表")
+                w_review_out = gr.Markdown(label="AI 复盘结果")
 
+        # ---------- AI 阅读出题 ----------
+        with gr.Tab("📝 AI 阅读出题"):
+            gr.Markdown(
+                "<div class='tab-desc'>上传**你自己的**阅读材料，"
+                "AI 按考研风格命制四选一阅读题（答案折叠，可自测）。</div>"
+            )
+            with gr.Group():
+                with gr.Row():
+                    quiz_file = gr.File(label="📄 阅读材料 (txt/pdf/docx)",
+                                        scale=3)
+                    quiz_count = gr.Slider(
+                        1, 10, value=3, step=1, label="题目数量", scale=1)
+                quiz_btn = gr.Button("📝 生成练习题", variant="primary",
+                                     size="lg")
+            quiz_out = gr.Markdown(label="练习题")
+
+        # ---------- 页脚 ----------
+        gr.Markdown(
+            "<div class='footer'>考研 AI 备考工作台 v0.3.0 · "
+            "数据合规：仓库不含任何版权内容，API Key 走环境变量</div>"
+        )
+
+        # ---------- 事件绑定 ----------
         analyze_btn.click(fn_analyze, [file_in, use_ai], analyze_out)
         plan_btn.click(fn_plan, [exam_date, daily_hours, plan_use_ai], plan_out)
         review_btn.click(fn_review, [wrong_text], review_out)
+        fill_btn.click(lambda: SAMPLE_WRONG, outputs=wrong_text)
         stats_btn.click(fn_cache_stats, outputs=cache_out)
         clear_btn.click(fn_cache_clear, outputs=cache_out)
 
@@ -274,6 +438,30 @@ def build_demo():
         quiz_btn.click(fn_quiz, [quiz_file, quiz_count], quiz_out)
 
     return demo
+
+
+# 全局样式：Hero / 描述条 / 页脚 / 输出美化
+_CSS = """
+.hero { text-align: center; padding: 18px 8px 6px; }
+.hero-title { font-size: 28px; font-weight: 700;
+              background: linear-gradient(120deg, #2563eb, #0891b2);
+              -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+              letter-spacing: 1px; }
+.hero-sub { color: #64748b; margin-top: 6px; font-size: 14px; }
+.hero-badges { margin-top: 10px; display: flex; gap: 8px; justify-content: center;
+               flex-wrap: wrap; }
+.hero-badges .badge { background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe;
+                      border-radius: 999px; padding: 4px 12px; font-size: 12px; }
+.tab-desc { color: #475569; font-size: 13px; margin-bottom: 4px;
+            padding: 8px 12px; background: #f8fafc; border-left: 3px solid #2563eb;
+            border-radius: 0 8px 8px 0; }
+.footer { text-align: center; color: #94a3b8; font-size: 12px;
+          margin-top: 24px; padding-top: 12px; border-top: 1px dashed #e2e8f0; }
+@media (prefers-color-scheme: dark) {
+  .hero-sub, .tab-desc, .footer { color: #94a3b8; }
+  .tab-desc { background: #1e293b; border-left-color: #3b82f6; }
+}
+"""
 
 
 if __name__ == "__main__":
