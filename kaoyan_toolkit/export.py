@@ -1,4 +1,10 @@
-"""导出：考点分析结果 → Markdown / Mermaid 思维导图。"""
+"""导出：考点分析结果 → Markdown / Mermaid 思维导图 / Markmap 交互式 HTML。
+
+- Mermaid：文本格式，可在支持 Mermaid 的工具中渲染
+- Markmap（可选，MIT, https://github.com/markmap/markmap）：生成可交互
+  折叠的 HTML 思维导图，浏览器双击即用
+"""
+import json
 
 
 def _md_escape(s) -> str:
@@ -75,3 +81,78 @@ def to_markdown(subject_dist: dict[str, int], top_keywords: list[tuple],
 
     out.append("> 本报告由本地规则 + DeepSeek AI 辅助生成，仅供参考。")
     return "\n".join(out)
+
+
+def to_markmap_html(subject_dist: dict[str, int],
+                    top_keywords: list[tuple[str, int]] | None = None,
+                    ai_result: dict | None = None) -> str:
+    """生成 Markmap 交互式思维导图 HTML（单文件，双击即用）。
+
+    Markmap（MIT 许可证）通过 jsDelivr CDN 加载，页面无需构建工具。
+    包含：科目分布、高频关键词、AI 分析要点，节点可交互折叠。
+    """
+    # 构建 Markdown 层级结构（markmap 按标题层级渲染）
+    md_lines = ["# 西综306考点分析思维导图", ""]
+
+    md_lines.append("## 科目分布（本地统计）")
+    for subject, hits in subject_dist.items():
+        md_lines.append(f"### {_md_escape(subject)}（{hits} 次命中）")
+        # 若 AI 结果含该科目考点，展开子节点
+        if ai_result and ai_result.get("subjects"):
+            for s in ai_result["subjects"]:
+                if s.get("name") == subject:
+                    kps = s.get("key_points", [])
+                    if kps:
+                        for kp in kps[:6]:
+                            md_lines.append(f"- {_md_escape(kp)}")
+    md_lines.append("")
+
+    if top_keywords:
+        md_lines.append("## 高频关键词")
+        for w, c in top_keywords[:20]:
+            md_lines.append(f"- {_md_escape(w)}（{c} 次）")
+        md_lines.append("")
+
+    if ai_result and ai_result.get("overall"):
+        md_lines.append("## AI 总评")
+        md_lines.append(f"{_md_escape(ai_result['overall'])}")
+        md_lines.append("")
+    if ai_result and ai_result.get("suggested_priority"):
+        md_lines.append("## 建议复习顺序")
+        md_lines.append(" → ".join(_md_escape(x) for x in ai_result["suggested_priority"]))
+        md_lines.append("")
+
+    markdown = "\n".join(md_lines)
+    return _MARKMAP_TEMPLATE.replace("__MARKDOWN_JSON__", json.dumps(markdown, ensure_ascii=False))
+
+
+# markmap 单文件 HTML 模板（占位符 __MARKDOWN_JSON__ 在运行时替换）
+_MARKMAP_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>西综306考点分析思维导图</title>
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#f8fbff; }
+  #mindmap { position:fixed; inset:0; }
+  .tip { position:fixed; top:10px; left:50%; transform:translateX(-50%);
+         background:#fff; border:1px solid #e2e8f0; border-radius:8px;
+         padding:6px 14px; font:13px "Microsoft YaHei",sans-serif;
+         color:#64748b; z-index:10; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+</style>
+</head>
+<body>
+<div class="tip">滚轮缩放 · 拖拽平移 · 点击节点展开/折叠</div>
+<svg id="mindmap"></svg>
+<script src="https://cdn.jsdelivr.net/npm/markmap-view@0.18.4/dist/browser/index.js"></script>
+<script>
+  const markdown = __MARKDOWN_JSON__;
+  const { Transformer } = window.markmap;
+  const transformer = new Transformer();
+  const { root } = transformer.transform(markdown);
+  const { Markmap } = window.markmap;
+  Markmap.create('#mindmap', { autoFit: true }, root);
+</script>
+</body>
+</html>"""

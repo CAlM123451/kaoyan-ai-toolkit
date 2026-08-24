@@ -1,4 +1,10 @@
-"""考点关键词提取：本地规则 + jieba 分词，把文本按西综科目归类。"""
+"""考点关键词提取：本地规则 + 中文分词（jieba 默认 / pkuseg 可选增强）。
+
+分词后端：
+- jieba（默认，零额外依赖）
+- pkuseg 医学领域模型（可选，MIT, https://github.com/lancopku/pkuseg-python）
+  医学分词准确率更高，设置 USE_PKUSEG=1 启用
+"""
 import re
 from collections import Counter
 
@@ -42,14 +48,31 @@ def detect_subjects(text: str) -> dict[str, int]:
     return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
 
 
-def extract_keywords(text: str, top: int = 20) -> list[tuple[str, int]]:
-    """用 jieba 提取文本中的医学高频词，返回 [(词, 次数)]。"""
+def _segment(text: str) -> list[str]:
+    """中文分词：默认 jieba；USE_PKUSEG=1 时用 pkuseg 医学领域模型。"""
+    import os
+
+    if os.getenv("USE_PKUSEG") == "1":
+        try:
+            import pkuseg
+            # pkuseg 内置 medicine 领域模型（MIT 许可证）
+            seg = pkuseg.pkuseg(model_name="medicine")
+            return seg.cut(text)
+        except ImportError:
+            raise RuntimeError(
+                "设置了 USE_PKUSEG=1 但未安装 pkuseg，请执行: pip install pkuseg"
+            )
+
     try:
         import jieba
     except ImportError:
         raise RuntimeError("需要安装 jieba: pip install jieba")
+    return jieba.lcut(text)
 
-    words = jieba.lcut(text)
+
+def extract_keywords(text: str, top: int = 20) -> list[tuple[str, int]]:
+    """提取文本中的医学高频词（jieba 或 pkuseg），返回 [(词, 次数)]。"""
+    words = _segment(text)
     counter = Counter(
         w for w in words
         if len(w) >= 2 and w not in _STOP_WORDS and not re.fullmatch(r"[\d\W]+", w)

@@ -1,0 +1,59 @@
+# Third-Party Notices
+
+This project integrates the following open-source projects.
+We gratefully acknowledge their authors and contributors.
+
+## Optional Dependencies (Enabled via Environment Variables / CLI Flags)
+
+### litellm
+- License: MIT
+- URL: https://github.com/BerriAI/litellm
+- Used for: Unified LLM API (100+ providers), enabled by LLM_MODEL env var
+- Note: Optional; DeepSeek direct connection remains the default
+
+### py-fsrs
+- License: MIT
+- URL: https://github.com/open-spaced-repetition/py-fsrs
+- Used for: Spaced repetition scheduling in `plan --fsrs`
+- Note: Optional; falls back to 1/2/4/7/15/30 day progression
+
+### pkuseg
+- License: MIT
+- URL: https://github.com/lancopku/pkuseg-python
+- Used for: Medical-domain Chinese word segmentation, enabled by USE_PKUSEG=1
+- Note: Optional; jieba remains the default
+
+### markmap
+- License: MIT
+- URL: https://github.com/markmap/markmap
+- Used for: Interactive HTML mindmap export (mindmap.html)
+- Note: Loaded via jsDelivr CDN at runtime; no build step required
+
+### PaddleOCR
+- License: Apache 2.0
+- URL: https://github.com/PaddlePaddle/PaddleOCR
+- Used for: OCR of scanned PDFs and image-based exam papers (USE_OCR=1)
+- Note: Optional; pdfplumber remains the default for text-layer PDFs
+
+### PyMuPDF (fitz)
+- License: AGPL-3.0 / commercial dual license
+- URL: https://github.com/pymupdf/pymupdf
+- Used for: Rendering scanned PDF pages to images for OCR fallback
+- Note: Used only at runtime inside the OCR fallback path; if you distribute
+  a modified binary including this path, AGPL obligations may apply.
+  For a fully MIT-only pipeline, use text-layer PDFs only.
+
+## Core Dependencies
+
+- requests (Apache 2.0)
+- gradio (Apache 2.0)
+- jieba (MIT)
+- pdfplumber (MIT)
+- python-docx (MIT)
+- tenacity (Apache 2.0)
+
+## Original Code
+
+All analysis logic, prompt templates, planning algorithms, wrong-book
+management, quiz generation, and CLI structure in this repository are
+original works of the project author.

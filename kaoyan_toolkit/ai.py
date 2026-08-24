@@ -1,4 +1,12 @@
-"""DeepSeek 集成：考点分析、错题复盘、计划生成。带缓存+重试。"""
+"""LLM 集成：考点分析、错题复盘、计划生成。带缓存+重试。
+
+支持两种后端：
+1. DeepSeek 直连（默认，零额外依赖）—— DEEPSEEK_API_KEY
+2. litellm 统一接口（MIT, https://github.com/BerriAI/litellm）
+   —— 100+ 模型商统一调用，设置 LLM_MODEL 即自动启用，
+      如 "deepseek/deepseek-chat"、"openai/gpt-4o-mini"、
+      "openai/qwen3.5-4b"（本地 vLLM/NewAPI 兼容端点）等。
+"""
 import hashlib
 import json
 import os
@@ -11,7 +19,8 @@ from .cache import AICache
 from .prompt import PLAN_PROMPT, SUBJECT_ANALYSIS_PROMPT, WRONG_QUESTION_PROMPT
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
-MODEL = "deepseek-chat"
+DEFAULT_MODEL = "deepseek-chat"
+MODEL = os.getenv("LLM_MODEL", DEFAULT_MODEL)
 
 
 def get_api_key() -> str | None:
@@ -43,6 +52,13 @@ def _truncate(text: str, max_chars: int) -> str:
        ))
 def _call_llm(prompt: str, system: str = "你是一位严谨的考研辅导专家。",
               max_tokens: int = 1500) -> str:
+    if MODEL != DEFAULT_MODEL:
+        return _call_llm_litellm(prompt, system, max_tokens)
+    return _call_llm_direct(prompt, system, max_tokens)
+
+
+def _call_llm_direct(prompt: str, system: str, max_tokens: int) -> str:
+    """DeepSeek 直连后端（requests 实现，无额外依赖）。"""
     api_key = get_api_key()
     if not api_key:
         raise RuntimeError(
@@ -77,6 +93,40 @@ def _call_llm(prompt: str, system: str = "你是一位严谨的考研辅导专�
         raise RuntimeError("API Key 无效或已过期，请检查 DEEPSEEK_API_KEY")
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"].strip()
+
+
+def _call_llm_litellm(prompt: str, system: str, max_tokens: int) -> str:
+    """litellm 统一接口后端（MIT 许可证，https://github.com/BerriAI/litellm）。
+
+    通过设置 LLM_MODEL 启用，例如：
+      export LLM_MODEL="deepseek/deepseek-chat"   # DeepSeek
+      export LLM_MODEL="openai/gpt-4o-mini"       # OpenAI
+      export LLM_MODEL="openai/qwen3.5-4b"        # 本地 vLLM/NewAPI
+    API Key 按模型商前缀从环境变量读取（OPENAI_API_KEY 等），
+    也支持 LLM_API_KEY 统一覆盖。
+    """
+    try:
+        import litellm
+    except ImportError:
+        raise RuntimeError(
+            "检测到 LLM_MODEL 但未安装 litellm，请执行: pip install litellm"
+        )
+
+    api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+    try:
+        resp = litellm.completion(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=max_tokens,
+            api_key=api_key,
+        )
+    except Exception as e:
+        raise RuntimeError(f"litellm 调用失败（{MODEL}）：{e}")
+    return resp.choices[0].message.content.strip()
 
 
 def _with_cache(cache: AICache | None, key: str,

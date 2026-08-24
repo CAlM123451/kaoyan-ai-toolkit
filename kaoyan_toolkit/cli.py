@@ -8,9 +8,10 @@ from datetime import date
 from .ai import analyze_subjects, generate_plan, review_wrong_question
 from .analyze import analyze_text
 from .cache import AICache
-from .export import to_markdown
+from .export import to_markdown, to_markmap_html
 from .parse import parse_file
-from .planner import compute_weeks, format_plan_markdown
+from .planner import (compute_weeks, format_fsrs_markdown,
+                      format_plan_markdown, fsrs_schedule)
 
 
 def _validate_date(s: str) -> str:
@@ -150,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     pa.add_argument("input", help="真题/资料文件 (txt/pdf/docx)")
     pa.add_argument("-o", "--output", default="output")
     pa.add_argument("--no-ai", action="store_true", help="仅本地统计，不调用 AI")
+    pa.add_argument("--markmap", action="store_true",
+                    help="额外生成 markmap 交互式 HTML 思维导图")
 
     # plan
     pp = sub.add_parser("plan", help="复习规划（纯本地）")
@@ -158,11 +161,15 @@ def main(argv: list[str] | None = None) -> int:
     pp.add_argument("--daily-hours", type=_validate_hours, default=4.0,
                     help="每天可用小时（默认 4）")
     pp.add_argument("-o", "--output", default="output")
+    pp.add_argument("--fsrs", action="store_true",
+                    help="使用 FSRS 间隔重复调度（可选安装 py-fsrs）")
 
     # mindmap
     pm = sub.add_parser("mindmap", help="思维导图导出")
     pm.add_argument("input", help="真题/资料文件")
     pm.add_argument("-o", "--output", default="output")
+    pm.add_argument("--html", action="store_true",
+                    help="生成 markmap 交互式 HTML（默认只输出 .mmd）")
 
     # review
     pr = sub.add_parser("review", help="错题复盘（需 API）")
@@ -247,12 +254,27 @@ def main(argv: list[str] | None = None) -> int:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(md)
             print(f"已生成: {path}")
+            if args.markmap:
+                mm_path = os.path.join(args.output, "mindmap.html")
+                html = to_markmap_html(local["subject_distribution"],
+                                       local["top_keywords"], ai)
+                with open(mm_path, "w", encoding="utf-8") as f:
+                    f.write(html)
+                print(f"已生成: {mm_path}（浏览器打开，交互式折叠）")
             return 0
 
         if args.cmd == "plan":
-            plan = compute_weeks(args.exam_date, args.daily_hours)
-            md = format_plan_markdown(plan)
-            path = os.path.join(args.output, "study_plan.md")
+            if args.fsrs:
+                from .planner import DEFAULT_PRIORITIES
+                subjects = [name for name, _ in DEFAULT_PRIORITIES]
+                daily_cap = max(int(args.daily_hours), 1)
+                schedule = fsrs_schedule(subjects, daily_capacity=daily_cap)
+                md = format_fsrs_markdown(schedule)
+                path = os.path.join(args.output, "fsrs_plan.md")
+            else:
+                plan = compute_weeks(args.exam_date, args.daily_hours)
+                md = format_plan_markdown(plan)
+                path = os.path.join(args.output, "study_plan.md")
             with open(path, "w", encoding="utf-8") as f:
                 f.write(md)
             print(f"已生成: {path}（本地算法，未调 API）")
@@ -267,6 +289,13 @@ def main(argv: list[str] | None = None) -> int:
                 f.write(to_mermaid(local["subject_distribution"],
                                    local["top_keywords"]))
             print(f"已生成: {path}")
+            if args.html:
+                mm_path = os.path.join(args.output, "mindmap.html")
+                html = to_markmap_html(local["subject_distribution"],
+                                       local["top_keywords"], None)
+                with open(mm_path, "w", encoding="utf-8") as f:
+                    f.write(html)
+                print(f"已生成: {mm_path}（浏览器打开，交互式折叠）")
             return 0
 
         if args.cmd == "review":
