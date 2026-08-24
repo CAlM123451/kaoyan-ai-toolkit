@@ -291,6 +291,9 @@ def build_demo():
             </div>
             """
         )
+        # 动态统计面板（错题/缓存，页面加载时刷新）
+        dashboard = gr.Markdown()
+        demo.load(fn_dashboard, outputs=dashboard)
 
         # ---------- 使用说明书 ----------
         with gr.Tab("📖 使用说明书"):
@@ -417,7 +420,8 @@ def build_demo():
 
         # ---------- 页脚 ----------
         gr.Markdown(
-            "<div class='footer'>考研 AI 备考工作台 v0.3.0 · "
+            "<div class='footer'>考研 AI 备考工作台 v0.5.0 · "
+            "缝合 litellm/FSRS/Markmap/PaddleOCR/pkuseg · "
             "数据合规：仓库不含任何版权内容，API Key 走环境变量</div>"
         )
 
@@ -442,26 +446,152 @@ def build_demo():
 
 # 全局样式：Hero / 描述条 / 页脚 / 输出美化
 _CSS = """
-.hero { text-align: center; padding: 18px 8px 6px; }
-.hero-title { font-size: 28px; font-weight: 700;
-              background: linear-gradient(120deg, #2563eb, #0891b2);
+/* ---------- 页面背景与整体 ---------- */
+.gradio-container {
+  background:
+    radial-gradient(1200px 500px at 50% -100px, rgba(37,99,235,.08), transparent 60%),
+    radial-gradient(900px 400px at 90% -50px, rgba(8,145,178,.06), transparent 55%),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+.gradio-container .main { max-width: 1180px; }
+
+/* ---------- Hero ---------- */
+.hero { text-align: center; padding: 26px 8px 10px; position: relative; }
+.hero::after {
+  content: ""; display: block; width: 90px; height: 4px; margin: 18px auto 0;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #2563eb, #0891b2, #2563eb);
+  background-size: 200% 100%; animation: hero-shine 3s linear infinite;
+}
+@keyframes hero-shine { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+.hero-title { font-size: 30px; font-weight: 800;
+              background: linear-gradient(120deg, #1d4ed8, #0891b2 55%, #2563eb);
               -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-              letter-spacing: 1px; }
-.hero-sub { color: #64748b; margin-top: 6px; font-size: 14px; }
-.hero-badges { margin-top: 10px; display: flex; gap: 8px; justify-content: center;
+              letter-spacing: 1.5px; }
+.hero-sub { color: #64748b; margin-top: 8px; font-size: 14px; letter-spacing: .5px; }
+.hero-badges { margin-top: 14px; display: flex; gap: 8px; justify-content: center;
                flex-wrap: wrap; }
 .hero-badges .badge { background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe;
-                      border-radius: 999px; padding: 4px 12px; font-size: 12px; }
-.tab-desc { color: #475569; font-size: 13px; margin-bottom: 4px;
-            padding: 8px 12px; background: #f8fafc; border-left: 3px solid #2563eb;
-            border-radius: 0 8px 8px 0; }
+                      border-radius: 999px; padding: 5px 14px; font-size: 12px;
+                      transition: transform .15s, box-shadow .15s; cursor: default; }
+.hero-badges .badge:hover { transform: translateY(-2px);
+                            box-shadow: 0 4px 10px rgba(37,99,235,.12); }
+
+/* ---------- 动态统计面板 ---------- */
+.hero-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+              gap: 12px; margin: 20px auto 4px; max-width: 760px; }
+.hero-stats .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+                         padding: 14px 10px 10px; text-align: center;
+                         box-shadow: 0 2px 8px rgba(15,23,42,.04);
+                         transition: transform .2s, box-shadow .2s; }
+.hero-stats .stat-card:hover { transform: translateY(-3px);
+                               box-shadow: 0 8px 20px rgba(15,23,42,.08); }
+.hero-stats .stat-num { font-size: 24px; font-weight: 800; color: #1e40af;
+                        line-height: 1.2; }
+.hero-stats .stat-label { font-size: 12px; color: #64748b; margin-top: 4px; }
+
+/* ---------- 页签 ---------- */
+.tabs { border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden;
+        background: #fff; box-shadow: 0 2px 12px rgba(15,23,42,.05); }
+.tab-nav button { font-size: 14px; transition: background .15s, color .15s; }
+.tab-nav button:hover { background: #eef2ff; }
+
+/* ---------- 描述条 ---------- */
+.tab-desc { color: #475569; font-size: 13px; margin: 0 0 12px;
+            padding: 10px 14px; background: linear-gradient(90deg, #f8fafc 0%, #eef2ff 100%);
+            border-left: 3px solid #2563eb; border-radius: 0 10px 10px 0; }
+
+/* ---------- 输入区卡片 ---------- */
+.group { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px !important;
+         padding: 6px; box-shadow: 0 2px 10px rgba(15,23,42,.04) !important; }
+.group:hover { border-color: #c7d2fe; }
+
+/* ---------- 按钮 ---------- */
+button.primary { background: linear-gradient(135deg, #2563eb, #0891b2) !important;
+                 border: none !important; transition: transform .15s, box-shadow .2s !important; }
+button.primary:hover { transform: translateY(-1px);
+                       box-shadow: 0 6px 16px rgba(37,99,235,.3) !important; }
+button.secondary { transition: transform .15s, box-shadow .2s !important; }
+button.secondary:hover { transform: translateY(-1px);
+                         box-shadow: 0 4px 12px rgba(15,23,42,.12) !important; }
+button.stop:hover { box-shadow: 0 4px 12px rgba(220,38,38,.25) !important; }
+
+/* ---------- 输出 Markdown 美化 ---------- */
+.prose h1 { border-bottom: 2px solid #eef2ff; padding-bottom: 8px; color: #1e293b; }
+.prose h2 { color: #1e40af; margin-top: 18px; padding-left: 10px;
+            border-left: 4px solid #2563eb; border-radius: 2px; }
+.prose h3 { color: #334155; }
+.prose table { border-collapse: separate; border-spacing: 0; width: 100%;
+               border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+.prose table th { background: #eef2ff; color: #1e40af; font-weight: 600;
+                  padding: 8px 12px; text-align: left; }
+.prose table td { padding: 8px 12px; border-top: 1px solid #f1f5f9; }
+.prose table tr:nth-child(even) td { background: #f8fafc; }
+.prose blockquote { border-left: 3px solid #93c5fd; background: #f8fafc;
+                    padding: 6px 12px; border-radius: 0 8px 8px 0; color: #64748b; }
+.prose code { background: #eef2ff; color: #1d4ed8; border-radius: 5px;
+              padding: 1px 6px; font-size: 13px; }
+.prose pre { background: #0f172a; border-radius: 10px; padding: 12px 14px; }
+.prose pre code { background: transparent; color: #e2e8f0; }
+
+/* ---------- Accordion ---------- */
+.accordion { border: 1px solid #e2e8f0 !important; border-radius: 12px !important;
+             margin-bottom: 10px !important; background: #fff !important; }
+
+/* ---------- 页脚 ---------- */
 .footer { text-align: center; color: #94a3b8; font-size: 12px;
-          margin-top: 24px; padding-top: 12px; border-top: 1px dashed #e2e8f0; }
+          margin-top: 28px; padding-top: 14px; border-top: 1px dashed #e2e8f0;
+          letter-spacing: .5px; }
+
 @media (prefers-color-scheme: dark) {
-  .hero-sub, .tab-desc, .footer { color: #94a3b8; }
-  .tab-desc { background: #1e293b; border-left-color: #3b82f6; }
+  .gradio-container {
+    background:
+      radial-gradient(1200px 500px at 50% -100px, rgba(37,99,235,.12), transparent 60%),
+      linear-gradient(180deg, #0f172a 0%, #111827 100%);
+  }
+  .hero-stats .stat-card { background: #1e293b; border-color: #334155; }
+  .hero-stats .stat-num { color: #93c5fd; }
+  .tabs { background: #111827; border-color: #334155; }
+  .group { background: #1e293b; border-color: #334155; }
+  .tab-desc { background: linear-gradient(90deg, #1e293b, #172554); color: #94a3b8;
+              border-left-color: #3b82f6; }
+  .prose table { border-color: #334155; }
+  .prose table th { background: #1e3a5f; color: #93c5fd; }
+  .prose table td { border-top-color: #334155; }
+  .prose table tr:nth-child(even) td { background: #1e293b; }
+  .prose h1 { color: #e2e8f0; border-bottom-color: #334155; }
+  .hero-sub { color: #94a3b8; }
+  .footer { color: #64748b; border-top-color: #334155; }
 }
 """
+
+
+def fn_dashboard() -> str:
+    """生成顶部统计面板（错题数 / 待复盘 / 缓存条目）。"""
+    stats_html = []
+    try:
+        st = _get_book().stats()
+        stats_html.append(
+            f"<div class='stat-card'><div class='stat-num'>{st['total']}</div>"
+            f"<div class='stat-label'>📚 错题总数</div></div>")
+        stats_html.append(
+            f"<div class='stat-card'><div class='stat-num'>{st['unreviewed']}</div>"
+            f"<div class='stat-label'>🔍 待复盘</div></div>")
+        stats_html.append(
+            f"<div class='stat-card'><div class='stat-num'>{st['repeated_count']}</div>"
+            f"<div class='stat-label'>⚠️ 反复错≥3次</div></div>")
+    except Exception:
+        stats_html.append("<div class='stat-card'><div class='stat-num'>—</div>"
+                          "<div class='stat-label'>📚 错题本</div></div>")
+    try:
+        c = _get_cache().stats()
+        stats_html.append(
+            f"<div class='stat-card'><div class='stat-num'>{c['entries']}</div>"
+            f"<div class='stat-label'>💾 缓存条目</div></div>")
+    except Exception:
+        stats_html.append("<div class='stat-card'><div class='stat-num'>—</div>"
+                          "<div class='stat-label'>💾 缓存</div></div>")
+    return f"<div class='hero-stats'>{''.join(stats_html)}</div>"
 
 
 if __name__ == "__main__":
