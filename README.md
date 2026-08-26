@@ -13,6 +13,8 @@ AIGC:
 
 > 用 AI 把西综真题榨干：考点分析 → 复习规划 → 思维导图 → 错题复盘。
 
+> **English** — AI exam-prep toolkit for China's postgraduate medical entrance exam (Western Medicine 306). Upload your own past papers (TXT/PDF/DOCX) to get AI-powered topic-frequency analysis, weekly study plans, mind maps, mistake review, and question generation — via a Gradio UI or CLI. DeepSeek-compatible LLM API (env-configured). Data stays local unless you call the API. MIT.
+
 面向西医综合（306）考研党的一站式 AI 备考工具。上传你自己拥有的真题/资料，工具在本地解析后，调用 DeepSeek 帮你做**考点考频分析**、生成**复习规划**、输出**思维导图**、**错题复盘**。
 
 ## 为什么做这个
