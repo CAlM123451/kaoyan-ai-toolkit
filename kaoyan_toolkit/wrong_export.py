@@ -5,9 +5,10 @@
     pip install openpyxl   # Excel .xlsx 导出
 """
 import os
+from typing import Any
 
 
-def export_anki(items: list[dict], path: str) -> str:
+def export_anki(items: list[dict[str, Any]], path: str) -> str:
     """把错题导出为 Anki 卡包（.apkg）。
 
     genanki（MIT 许可证, https://github.com/kerrickstaley/genanki）
@@ -54,7 +55,7 @@ def export_anki(items: list[dict], path: str) -> str:
     return path
 
 
-def export_excel(items: list[dict], path: str) -> str:
+def export_excel(items: list[dict[str, Any]], path: str) -> str:
     """把错题导出为 Excel 表格（.xlsx）。
 
     openpyxl（MIT 许可证, https://github.com/openpyxl/openpyxl）
@@ -63,6 +64,7 @@ def export_excel(items: list[dict], path: str) -> str:
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
     except ImportError:
         raise RuntimeError("导出 Excel 需要安装 openpyxl: pip install openpyxl")
 
@@ -93,10 +95,10 @@ def export_excel(items: list[dict], path: str) -> str:
             it.get("reviewed_at") or "",
         ])
 
-    # 宽度与自动换行优化
+    # 宽度与自动换行优化（使用 get_column_letter 支持任意列数）
     widths = [6, 10, 14, 50, 16, 16, 40, 12, 10, 18, 18]
     for i, w in enumerate(widths, 1):
-        ws.column_dimensions[chr(64 + i)].width = w
+        ws.column_dimensions[get_column_letter(i)].width = w
     for row in ws.iter_rows(min_row=2):
         for cell in row:
             cell.alignment = Alignment(wrap_text=True, vertical="top")

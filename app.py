@@ -508,13 +508,23 @@ _CSS = """
 
 /* ---------- 按钮 ---------- */
 button.primary { background: linear-gradient(135deg, #2563eb, #0891b2) !important;
-                 border: none !important; transition: transform .15s, box-shadow .2s !important; }
-button.primary:hover { transform: translateY(-1px);
-                       box-shadow: 0 6px 16px rgba(37,99,235,.3) !important; }
-button.secondary { transition: transform .15s, box-shadow .2s !important; }
+                 border: none !important; transition: all .2s ease !important;
+                 position: relative; overflow: hidden; }
+button.primary:hover { transform: translateY(-2px);
+                       box-shadow: 0 8px 20px rgba(37,99,235,.35) !important; }
+button.primary:active { transform: translateY(0); }
+button.primary::after { content: ""; position: absolute; inset: 0;
+                        background: linear-gradient(135deg, transparent, rgba(255,255,255,.2), transparent);
+                        transform: translateX(-100%); transition: transform .5s; }
+button.primary:hover::after { transform: translateX(100%); }
+button.secondary { transition: all .2s ease !important; }
 button.secondary:hover { transform: translateY(-1px);
                          box-shadow: 0 4px 12px rgba(15,23,42,.12) !important; }
 button.stop:hover { box-shadow: 0 4px 12px rgba(220,38,38,.25) !important; }
+
+/* ---------- 加载动画 ---------- */
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.loading { animation: pulse 1.5s ease-in-out infinite; }
 
 /* ---------- 输出 Markdown 美化 ---------- */
 .prose h1 { border-bottom: 2px solid #eef2ff; padding-bottom: 8px; color: #1e293b; }
