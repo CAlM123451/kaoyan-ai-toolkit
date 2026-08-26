@@ -5,7 +5,7 @@
 2. litellm 统一接口（MIT, https://github.com/BerriAI/litellm）
    —— 100+ 模型商统一调用，设置 LLM_MODEL 即自动启用，
       如 "deepseek/deepseek-chat"、"openai/gpt-4o-mini"、
-      "openai/qwen3.5-4b"（本地 vLLM/NewAPI 兼容端点）等。
+      "openai/your-local-model"（本地 vLLM 兼容端点）等。
 """
 import hashlib
 import json
@@ -101,7 +101,7 @@ def _call_llm_litellm(prompt: str, system: str, max_tokens: int) -> str:
     通过设置 LLM_MODEL 启用，例如：
       export LLM_MODEL="deepseek/deepseek-chat"   # DeepSeek
       export LLM_MODEL="openai/gpt-4o-mini"       # OpenAI
-      export LLM_MODEL="openai/qwen3.5-4b"        # 本地 vLLM/NewAPI
+      export LLM_MODEL="openai/your-local-model"  # 本地 vLLM 兼容端点
     API Key 按模型商前缀从环境变量读取（OPENAI_API_KEY 等），
     也支持 LLM_API_KEY 统一覆盖。
     """
